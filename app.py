@@ -1,4 +1,5 @@
 # app.py
+import os 
 import streamlit as st
 import json
 from datetime import date, datetime, timedelta
@@ -10,6 +11,16 @@ def load_tasks():
         with open(DB_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
+        return []
+    except json.JSONDecodeError:
+        # Backup the broken file so you can inspect it later
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"{DB_FILE}.broken_{ts}.bak"
+        try:
+            os.rename(DB_FILE, backup_name)
+        except OSError:
+            # If rename fails (rare), just ignore and start fresh
+            pass
         return []
 
 
@@ -35,7 +46,13 @@ def generate_plan(tasks, daily_cap_hours=3.0, start_day=None):
     # build list of days up to max due date
     if not active:
         return plan, warnings
+    
     last_due = max(parse_date(t["due_date"]) for t in active)
+
+#add cap?
+
+
+
 
     day = start_day
     while day <= last_due:
