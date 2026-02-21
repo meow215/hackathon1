@@ -6,7 +6,6 @@ import smtplib
 import random
 from email.message import EmailMessage
 from datetime import date, datetime, timedelta
-from dotenv import load_dotenv
 
 DB_FILE = "tasks.json"
 
@@ -90,14 +89,15 @@ def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0):
     plan = {d: items for d, items in plan.items() if items}
     return plan, warnings
 
+
 def SendReminderEmails(address, name, due_date):
-    load_dotenv()
-    sender = os.getenv("EMAIL")
-    password = os.getenv("PASSWORD")
+    sender = st.secrets.get("EMAIL")
+    password = st.secrets.get("PASSWORD")
 
     if not sender or not password:
-        st.error("No default email or password")
+        st.error("Missing EMAIL/PASSWORD in Streamlit secrets.")
         return
+
     
     message = EmailMessage()
     message["From"] = sender
