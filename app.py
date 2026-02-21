@@ -3,6 +3,7 @@ import os
 import streamlit as st
 import json
 import smtplib
+import random
 from email.message import EmailMessage
 from datetime import date, datetime, timedelta
 from dotenv import load_dotenv
@@ -161,9 +162,35 @@ for t in tasks:
 if tasks_updated:
     save_tasks(tasks)
 
-tab1, tab2, tab3, tab4 = st.tabs(["➕ Add Task", "📋 Tasks", "🗓️ Plan", "📓 History"])
+tab1, tab2, tab3, tab4, tab5= st.tabs(["📰 Today's Tasks", "➕ Add Task", "📋 All Tasks", "🗓️ Plan", "📓 History"])
 
 with tab1:
+    n = random.randint(1, 5)
+
+    if n == 1:
+        header = "What's new for today? 🌤️"
+    elif n == 2:
+        header = "Are you ready for a fresh new day? 🌈"
+    elif n == 3:
+        header = "Good to see you again! Eager for some productivity? 💪"
+    elif n == 4:
+        header = "Keep on with the good work! 😊"
+    else:
+        header = "What a lovely day for a new adventure! 🎵"
+    st.subheader(header)
+    no_task = True
+    index = 1
+    for t in tasks:
+        if t["archived"] == False and parse_date(t["start_date"]) <= parse_date(str(date.today())) and parse_date(str(date.today())) <= parse_date(t["due_date"]):
+            cols = st.columns([1, 8])
+            cols[0].write(f"{index}.")
+            cols[1].write(f"**{t['name']}**")
+            index += 1
+            no_task = False
+    if no_task:
+        st.info("Hooray! No task for today!")
+
+with tab2:
     st.subheader("Add a task")
     name = st.text_input("Task name")
     start = st.date_input("Start date", value = date.today())
@@ -191,7 +218,7 @@ with tab1:
             st.success("Task added!")
             st.rerun()
 
-with tab2:
+with tab3:
     st.subheader("Your tasks")
     no_task = True
     for t in tasks:
@@ -268,7 +295,7 @@ with tab2:
                 st.warning("Deleted.")
                 st.rerun()
 
-with tab3:
+with tab4:
     st.subheader("Generate your plan")
     weekday_cap = st.slider("Max study hours per weekday (Mon–Fri)", 0.0, 10.0, 3.0, 0.5)
     weekend_cap = st.slider("Max study hours per weekend day (Sat–Sun)", 0.0, 10.0, 2.0, 0.5)
@@ -290,7 +317,7 @@ with tab3:
             for task_name, h in items:
                 st.write(f"- {task_name}: **{h}h**")
 
-with tab4:
+with tab5:
     st.subheader("View plan history")
     no_task = True
     for t in tasks:
