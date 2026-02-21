@@ -190,6 +190,8 @@ with tab2:
     else:
         for i, t in enumerate(tasks):
             remaining = max(0.0, t["estimated_hours"] - t["done_hours"])
+            progress = max(1.0, t["done_hours"] / t["estimated_hours"])
+            percent = int(100 * progress)
             cols = st.columns([3, 2, 2, 2])
             cols[0].write(f"**{t['name']}**")
             cols[1].write(f"Due: {t['due_date']}")
@@ -199,6 +201,7 @@ with tab2:
                 min_value=0.0, max_value=float(t["estimated_hours"]), value=0.0, step=0.5,
                 key=f"done_{i}"
             )
+            st.progress(progress, text = f"{percent}% complete")
             c1, c2 = st.columns([1, 1])
             if c1.button("Update", key=f"upd_{i}"):
                 t["done_hours"] = min(t["estimated_hours"], t["done_hours"] + add_done)
