@@ -2,7 +2,10 @@
 import os 
 import streamlit as st
 import json
+import smtplib
+from email.message import EmailMessage
 from datetime import date, datetime, timedelta
+from dotenv import load_dotenv
 
 DB_FILE = "tasks.json"
 
@@ -33,46 +36,44 @@ def parse_date(d):
     return datetime.strptime(d, "%Y-%m-%d").date()
 
 
-def generate_plan(tasks, daily_cap_hours=3.0, start_day=None):
+def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0, start_day=None):
     start_day = start_day or date.today()
-    # only unfinished tasks
+
     active = [t for t in tasks if t["remaining_hours"] > 0]
-    # sort by due date then priority (1 highest)
     active.sort(key=lambda t: (parse_date(t["due_date"]), t["priority"]))
 
-    plan = {}  # day -> list of (task_name, hours)
+    plan = {}
     warnings = []
 
-    # build list of days up to max due date
     if not active:
         return plan, warnings
-    
+
     last_due = max(parse_date(t["due_date"]) for t in active)
 
-#add cap?
-
-
-
-
+    # Create days + capacity (weekday vs weekend)
+    cap = {}
     day = start_day
     while day <= last_due:
-        plan[str(day)] = []
+        dkey = str(day)
+        plan[dkey] = []
+
+        # weekday: Mon(0)..Fri(4), weekend: Sat(5), Sun(6)
+        if day.weekday() >= 5:
+            cap[dkey] = float(weekend_cap_hours)
+        else:
+            cap[dkey] = float(weekday_cap_hours)
+
         day += timedelta(days=1)
 
-    # track remaining capacity per day
-    cap = {d: daily_cap_hours for d in plan.keys()}
-
-
-
+    # Allocate hours greedily
     for t in active:
         due = parse_date(t["due_date"])
         hours_left = t["remaining_hours"]
         day = start_day
 
-        # allocate from start_day to due date for each task
         while day <= due and hours_left > 0:
             dkey = str(day)
-            if dkey in cap and cap[dkey] > 0:
+            if cap.get(dkey, 0) > 0:
                 h = min(cap[dkey], hours_left)
                 plan[dkey].append((t["name"], round(h, 2)))
                 cap[dkey] -= h
@@ -84,9 +85,43 @@ def generate_plan(tasks, daily_cap_hours=3.0, start_day=None):
                 f"Not enough time for **{t['name']}**: short by {round(hours_left,2)} hours before {t['due_date']}."
             )
 
-    # remove empty days
+    # Remove empty days for cleaner display
     plan = {d: items for d, items in plan.items() if items}
     return plan, warnings
+
+def SendReminderEmails(address, name, due_date):
+    load_dotenv()
+    sender = os.getenv("EMAIL")
+    password = os.getenv("PASSWORD")
+
+    if not sender or not password:
+        st.error("No default email or password")
+        return
+    
+    message = EmailMessage()
+    message["From"] = sender
+    message["To"] = address
+    message["Subject"] = f"⏰ Reminder: '{name}' due tomorrow"
+    message.set_content(
+        f"""
+Hey there!
+
+Just a friendly reminder that your task:
+
+  📌 {name}
+
+is due on:
+
+  📅 {due_date}
+
+Good luck!
+
+-Smart Study Planner
+"""
+)
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(sender, password)
+        server.send_message(message)
 
 st.set_page_config(page_title="Smart Study Planner", layout="centered")
 st.title("📚 Smart Study Planner")
@@ -98,6 +133,29 @@ for t in tasks:
     if "done_hours" not in t:
         t["done_hours"] = 0.0
     t["remaining_hours"] = max(0.0, float(t["estimated_hours"]) - float(t["done_hours"]))
+    if "email" not in t:
+        t["email"] = []
+    if "email_sent" not in t:
+        t["email_sent"] = False
+
+tasks_updated = False
+today = date.today()
+for t in tasks:
+    due_date_obj = parse_date(t["due_date"])
+    if t.get("email") and not t.get("email_sent", False):
+        # Check if task is due tomorrow
+        if due_date_obj - timedelta(days=1) == today:
+            try:
+                SendReminderEmails(t["email"], t["name"], t["due_date"])
+                t["email_sent"] = True
+                tasks_updated = True
+                st.success(f"Reminder sent for '{t['name']}'!")
+            except Exception as e:
+                st.error(f"Failed to send email for '{t['name']}': {e}")
+
+# Save updates if any emails were sent
+if tasks_updated:
+    save_tasks(tasks)
 
 tab1, tab2, tab3 = st.tabs(["➕ Add Task", "📋 Tasks", "🗓️ Plan"])
 
@@ -107,6 +165,7 @@ with tab1:
     due = st.date_input("Due date", value=date.today() + timedelta(days=7))
     hours = st.number_input("Estimated hours", min_value=0.5, max_value=200.0, value=5.0, step=0.5)
     priority = st.selectbox("Priority (1 = high)", [1, 2, 3], index=1)
+    email = st.text_input("Reminder email address (optional)")
 
     if st.button("Add"):
         if not name.strip():
@@ -117,7 +176,9 @@ with tab1:
                 "due_date": str(due),
                 "estimated_hours": float(hours),
                 "done_hours": 0.0,
-                "priority": int(priority)
+                "priority": int(priority),
+                "email": email.strip(),
+                "email_sent": False
             })
             save_tasks(tasks)
             st.success("Task added!")
@@ -151,13 +212,18 @@ with tab2:
 
 with tab3:
     st.subheader("Generate your plan")
-    daily_cap = st.slider("Max study hours per day", 1.0, 10.0, 3.0, 0.5)
-
+    weekday_cap = st.slider("Max study hours per weekday (Mon–Fri)", 0.0, 10.0, 3.0, 0.5)
+    weekend_cap = st.slider("Max study hours per weekend day (Sat–Sun)", 0.0, 10.0, 2.0, 0.5)
     # Recompute remaining hours
     for t in tasks:
         t["remaining_hours"] = max(0.0, float(t["estimated_hours"]) - float(t["done_hours"]))
 
-    plan, warnings = generate_plan(tasks, daily_cap_hours=float(daily_cap))
+    plan, warnings = generate_plan(tasks,
+                                   weekday_cap_hours=float(weekday_cap)
+                                   
+                                   ,
+                                   weekend_cap_hours=float(weekend_cap)
+    )
 
     if warnings:
         for w in warnings:
