@@ -36,46 +36,44 @@ def parse_date(d):
     return datetime.strptime(d, "%Y-%m-%d").date()
 
 
-def generate_plan(tasks, daily_cap_hours=3.0, start_day=None):
+def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0, start_day=None):
     start_day = start_day or date.today()
-    # only unfinished tasks
+
     active = [t for t in tasks if t["remaining_hours"] > 0]
-    # sort by due date then priority (1 highest)
     active.sort(key=lambda t: (parse_date(t["due_date"]), t["priority"]))
 
-    plan = {}  # day -> list of (task_name, hours)
+    plan = {}
     warnings = []
 
-    # build list of days up to max due date
     if not active:
         return plan, warnings
-    
+
     last_due = max(parse_date(t["due_date"]) for t in active)
 
-#add cap?
-
-
-
-
+    # Create days + capacity (weekday vs weekend)
+    cap = {}
     day = start_day
     while day <= last_due:
-        plan[str(day)] = []
+        dkey = str(day)
+        plan[dkey] = []
+
+        # weekday: Mon(0)..Fri(4), weekend: Sat(5), Sun(6)
+        if day.weekday() >= 5:
+            cap[dkey] = float(weekend_cap_hours)
+        else:
+            cap[dkey] = float(weekday_cap_hours)
+
         day += timedelta(days=1)
 
-    # track remaining capacity per day
-    cap = {d: daily_cap_hours for d in plan.keys()}
-
-
-
+    # Allocate hours greedily
     for t in active:
         due = parse_date(t["due_date"])
         hours_left = t["remaining_hours"]
         day = start_day
 
-        # allocate from start_day to due date for each task
         while day <= due and hours_left > 0:
             dkey = str(day)
-            if dkey in cap and cap[dkey] > 0:
+            if cap.get(dkey, 0) > 0:
                 h = min(cap[dkey], hours_left)
                 plan[dkey].append((t["name"], round(h, 2)))
                 cap[dkey] -= h
@@ -87,7 +85,7 @@ def generate_plan(tasks, daily_cap_hours=3.0, start_day=None):
                 f"Not enough time for **{t['name']}**: short by {round(hours_left,2)} hours before {t['due_date']}."
             )
 
-    # remove empty days
+    # Remove empty days for cleaner display
     plan = {d: items for d, items in plan.items() if items}
     return plan, warnings
 
@@ -192,10 +190,6 @@ with tab2:
     else:
         for i, t in enumerate(tasks):
             remaining = max(0.0, t["estimated_hours"] - t["done_hours"])
-
-            progress = min(1.0, t["done_hours"] / t["estimated_hours"])
-            percent = int(100 * progress)
-
             cols = st.columns([3, 2, 2, 2])
             cols[0].write(f"**{t['name']}**")
             cols[1].write(f"Due: {t['due_date']}")
@@ -205,14 +199,12 @@ with tab2:
                 min_value=0.0, max_value=float(t["estimated_hours"]), value=0.0, step=0.5,
                 key=f"done_{i}"
             )
-
-            st.progress(progress, text = f"{percent}% completed.")
-
             c1, c2 = st.columns([1, 1])
             if c1.button("Update", key=f"upd_{i}"):
                 t["done_hours"] = min(t["estimated_hours"], t["done_hours"] + add_done)
                 save_tasks(tasks)
                 st.success("Updated!")
+                st.rerun()
             if c2.button("Delete", key=f"del_{i}"):
                 tasks.pop(i)
                 save_tasks(tasks)
@@ -221,13 +213,18 @@ with tab2:
 
 with tab3:
     st.subheader("Generate your plan")
-    daily_cap = st.slider("Max study hours per day", 1.0, 10.0, 3.0, 0.5)
-
+    weekday_cap = st.slider("Max study hours per weekday (Mon–Fri)", 0.0, 10.0, 3.0, 0.5)
+    weekend_cap = st.slider("Max study hours per weekend day (Sat–Sun)", 0.0, 10.0, 2.0, 0.5)
     # Recompute remaining hours
     for t in tasks:
         t["remaining_hours"] = max(0.0, float(t["estimated_hours"]) - float(t["done_hours"]))
 
-    plan, warnings = generate_plan(tasks, daily_cap_hours=float(daily_cap))
+    plan, warnings = generate_plan(tasks,
+                                   weekday_cap_hours=float(weekday_cap)
+                                   
+                                   ,
+                                   weekend_cap_hours=float(weekend_cap)
+    )
 
     if warnings:
         for w in warnings:
