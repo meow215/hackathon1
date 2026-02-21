@@ -6,7 +6,6 @@ import smtplib
 import random
 from email.message import EmailMessage
 from datetime import date, datetime, timedelta
-from dotenv import load_dotenv
 
 DB_FILE = "tasks.json"
 
@@ -90,14 +89,15 @@ def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0):
     plan = {d: items for d, items in plan.items() if items}
     return plan, warnings
 
+
 def SendReminderEmails(address, name, due_date):
-    load_dotenv()
-    sender = os.getenv("EMAIL")
-    password = os.getenv("PASSWORD")
+    sender = st.secrets.get("EMAIL")
+    password = st.secrets.get("PASSWORD")
 
     if not sender or not password:
-        st.error("No default email or password")
+        st.error("Missing EMAIL/PASSWORD in Streamlit secrets.")
         return
+
     
     message = EmailMessage()
     message["From"] = sender
@@ -243,13 +243,53 @@ with tab3:
                 key=f"done_{i}"
             )
             st.progress(progress, text = f"{percent}% complete")
-            c1, c2 = st.columns([1, 1])
+            edit_open = st.checkbox("Edit", key=f"edit_{i}")
+
+            if edit_open:
+                with st.expander("Edit task", expanded=True):
+                    new_due = st.date_input("Due date", value=parse_date(t["due_date"]), key=f"due_edit_{i}")
+                    new_est = st.number_input(
+                        "Estimated hours",
+                        min_value=0.5,
+                        max_value=200.0,
+                        value=float(t["estimated_hours"]),
+                        step=0.5,
+                        key=f"est_edit_{i}",
+                    )
+
+                    # Optional: let user directly set remaining hours
+                    # This works by adjusting done_hours accordingly.
+                    new_remaining = st.number_input(
+                        "Remaining hours",
+                        min_value=0.0,
+                        max_value=float(new_est),
+                        value=max(0.0, float(new_est) - float(t["done_hours"])),
+                        step=0.5,
+                        key=f"rem_edit_{i}",
+                    )
+
+                    if st.button("Save edits", key=f"save_edit_{i}"):
+                        t["due_date"] = str(new_due)
+                        t["estimated_hours"] = float(new_est)
+
+                        # Convert "remaining hours" into done_hours
+                        t["done_hours"] = max(0.0, float(new_est) - float(new_remaining))
+
+                        # If due date changed, you probably want to allow email again:
+                        t["email_sent"] = False
+
+                        save_tasks(tasks)
+                        st.success("Edits saved!")
+                        st.rerun()
+            c1, spacer, c3 = st.columns([1, 6, 1])  # spacer pushes Delete to the right
+
             if c1.button("Update", key=f"upd_{i}"):
                 t["done_hours"] = min(t["estimated_hours"], t["done_hours"] + add_done)
                 save_tasks(tasks)
                 st.success("Updated!")
                 st.rerun()
-            if c2.button("Delete", key=f"del_{i}"):
+
+            if c3.button("Delete", key=f"del_{i}"):
                 t["archived"] = True
                 save_tasks(tasks)
                 st.warning("Deleted.")
