@@ -1,2 +1,2 @@
 # hackathon1
-hi I hope we survive 
+A small study planning app run on your own computer using streamlit.

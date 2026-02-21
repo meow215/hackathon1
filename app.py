@@ -36,8 +36,13 @@ def parse_date(d):
     return datetime.strptime(d, "%Y-%m-%d").date()
 
 
+<<<<<<< HEAD
 def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0, start_day=None):
     start_day = start_day or date.today()
+=======
+def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0):
+    today = date.today()
+>>>>>>> f3a2db9330578ec9cb565484320e30a28f062ff7
 
     active = [t for t in tasks if t["remaining_hours"] > 0]
     active.sort(key=lambda t: (parse_date(t["due_date"]), t["priority"]))
@@ -52,7 +57,11 @@ def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0, start_day
 
     # Create days + capacity (weekday vs weekend)
     cap = {}
+<<<<<<< HEAD
     day = start_day
+=======
+    day = today
+>>>>>>> f3a2db9330578ec9cb565484320e30a28f062ff7
     while day <= last_due:
         dkey = str(day)
         plan[dkey] = []
@@ -69,7 +78,7 @@ def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0, start_day
     for t in active:
         due = parse_date(t["due_date"])
         hours_left = t["remaining_hours"]
-        day = start_day
+        day = parse_date(t["start_date"])
 
         while day <= due and hours_left > 0:
             dkey = str(day)
@@ -137,6 +146,32 @@ for t in tasks:
         t["email"] = []
     if "email_sent" not in t:
         t["email_sent"] = False
+<<<<<<< HEAD
+
+tasks_updated = False
+today = date.today()
+for t in tasks:
+    due_date_obj = parse_date(t["due_date"])
+    if t.get("email") and not t.get("email_sent", False):
+        # Check if task is due tomorrow
+        if due_date_obj - timedelta(days=1) == today:
+            try:
+                SendReminderEmails(t["email"], t["name"], t["due_date"])
+                t["email_sent"] = True
+                tasks_updated = True
+                st.success(f"Reminder sent for '{t['name']}'!")
+            except Exception as e:
+                st.error(f"Failed to send email for '{t['name']}': {e}")
+
+# Save updates if any emails were sent
+if tasks_updated:
+    save_tasks(tasks)
+=======
+    if "archived" not in t:
+        t["archived"] = False
+    if "start_date" not in t:
+        t["start_date"] = str(date.today())
+>>>>>>> f3a2db9330578ec9cb565484320e30a28f062ff7
 
 tasks_updated = False
 today = date.today()
@@ -157,11 +192,12 @@ for t in tasks:
 if tasks_updated:
     save_tasks(tasks)
 
-tab1, tab2, tab3 = st.tabs(["➕ Add Task", "📋 Tasks", "🗓️ Plan"])
+tab1, tab2, tab3, tab4 = st.tabs(["➕ Add Task", "📋 Tasks", "🗓️ Plan", "📓 History"])
 
 with tab1:
     st.subheader("Add a task")
     name = st.text_input("Task name")
+    start = st.date_input("Start date", value = date.today())
     due = st.date_input("Due date", value=date.today() + timedelta(days=7))
     hours = st.number_input("Estimated hours", min_value=0.5, max_value=200.0, value=5.0, step=0.5)
     priority = st.selectbox("Priority (1 = high)", [1, 2, 3], index=1)
@@ -173,23 +209,38 @@ with tab1:
         else:
             tasks.append({
                 "name": name.strip(),
+                "start_date": str(start),
                 "due_date": str(due),
                 "estimated_hours": float(hours),
                 "done_hours": 0.0,
                 "priority": int(priority),
                 "email": email.strip(),
+<<<<<<< HEAD
                 "email_sent": False
+=======
+                "email_sent": False,
+                "archived": False
+>>>>>>> f3a2db9330578ec9cb565484320e30a28f062ff7
             })
             save_tasks(tasks)
             st.success("Task added!")
+            st.rerun()
 
 with tab2:
     st.subheader("Your tasks")
-    if not tasks:
+    no_task = True
+    for t in tasks:
+        if t["archived"] == False:
+            no_task = False
+    if no_task:
         st.info("No tasks yet. Add one!")
     else:
         for i, t in enumerate(tasks):
+            if t["archived"] == True:
+                continue
             remaining = max(0.0, t["estimated_hours"] - t["done_hours"])
+            progress = min(1.0, t["done_hours"] / t["estimated_hours"])
+            percent = int(100 * progress)
             cols = st.columns([3, 2, 2, 2])
             cols[0].write(f"**{t['name']}**")
             cols[1].write(f"Due: {t['due_date']}")
@@ -199,13 +250,15 @@ with tab2:
                 min_value=0.0, max_value=float(t["estimated_hours"]), value=0.0, step=0.5,
                 key=f"done_{i}"
             )
+            st.progress(progress, text = f"{percent}% complete")
             c1, c2 = st.columns([1, 1])
             if c1.button("Update", key=f"upd_{i}"):
                 t["done_hours"] = min(t["estimated_hours"], t["done_hours"] + add_done)
                 save_tasks(tasks)
                 st.success("Updated!")
+                st.rerun()
             if c2.button("Delete", key=f"del_{i}"):
-                tasks.pop(i)
+                t["archived"] = True
                 save_tasks(tasks)
                 st.warning("Deleted.")
                 st.rerun()
@@ -218,12 +271,16 @@ with tab3:
     for t in tasks:
         t["remaining_hours"] = max(0.0, float(t["estimated_hours"]) - float(t["done_hours"]))
 
+<<<<<<< HEAD
     plan, warnings = generate_plan(tasks,
                                    weekday_cap_hours=float(weekday_cap)
                                    
                                    ,
                                    weekend_cap_hours=float(weekend_cap)
     )
+=======
+    plan, warnings = generate_plan(tasks, weekday_cap_hours=float(weekday_cap), weekend_cap_hours=float(weekend_cap))
+>>>>>>> f3a2db9330578ec9cb565484320e30a28f062ff7
 
     if warnings:
         for w in warnings:
@@ -236,3 +293,26 @@ with tab3:
             st.markdown(f"### {day}")
             for task_name, h in items:
                 st.write(f"- {task_name}: **{h}h**")
+
+with tab4:
+    st.subheader("View plan history")
+    no_task = True
+    for t in tasks:
+        if t["archived"] == True:
+            no_task = False
+    if no_task:
+        st.info("No history to view yet")
+    else:
+        for t in tasks:
+            if t["archived"] == False:
+                continue
+            cols = st.columns([3, 2, 2, 2])
+            cols[0].write(f"**{t['name']}**")
+            cols[1].write(f"Due: {t['due_date']}")
+            cols[2].write(f"Estimated time: {t['estimated_hours']}")
+            if cols[3].button("Restore"):
+                t["archived"] = False
+                t["done_hours"] = 0.0
+                save_tasks(tasks)
+                st.success("Updated!")
+                st.rerun()
