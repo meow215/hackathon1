@@ -137,6 +137,8 @@ for t in tasks:
         t["email"] = []
     if "email_sent" not in t:
         t["email_sent"] = False
+    if "archived" not in t:
+        t["archived"] = False
 
 tasks_updated = False
 today = date.today()
@@ -157,7 +159,7 @@ for t in tasks:
 if tasks_updated:
     save_tasks(tasks)
 
-tab1, tab2, tab3 = st.tabs(["➕ Add Task", "📋 Tasks", "🗓️ Plan"])
+tab1, tab2, tab3, tab4 = st.tabs(["➕ Add Task", "📋 Tasks", "🗓️ Plan", "📓 History"])
 
 with tab1:
     st.subheader("Add a task")
@@ -178,19 +180,27 @@ with tab1:
                 "done_hours": 0.0,
                 "priority": int(priority),
                 "email": email.strip(),
-                "email_sent": False
+                "email_sent": False,
+                "archived": False
             })
             save_tasks(tasks)
             st.success("Task added!")
+            st.rerun()
 
 with tab2:
     st.subheader("Your tasks")
-    if not tasks:
+    no_task = True
+    for t in tasks:
+        if t["archived"] == False:
+            no_task = False
+    if no_task:
         st.info("No tasks yet. Add one!")
     else:
         for i, t in enumerate(tasks):
+            if t["archived"] == True:
+                continue
             remaining = max(0.0, t["estimated_hours"] - t["done_hours"])
-            progress = max(1.0, t["done_hours"] / t["estimated_hours"])
+            progress = min(1.0, t["done_hours"] / t["estimated_hours"])
             percent = int(100 * progress)
             cols = st.columns([3, 2, 2, 2])
             cols[0].write(f"**{t['name']}**")
@@ -209,7 +219,7 @@ with tab2:
                 st.success("Updated!")
                 st.rerun()
             if c2.button("Delete", key=f"del_{i}"):
-                tasks.pop(i)
+                t["archived"] = True
                 save_tasks(tasks)
                 st.warning("Deleted.")
                 st.rerun()
@@ -240,3 +250,26 @@ with tab3:
             st.markdown(f"### {day}")
             for task_name, h in items:
                 st.write(f"- {task_name}: **{h}h**")
+
+with tab4:
+    st.subheader("View plan history")
+    no_task = True
+    for t in tasks:
+        if t["archived"] == True:
+            no_task = False
+    if no_task:
+        st.info("No history to view yet.")
+    else:
+        for t in tasks:
+            if t["archived"] == False:
+                continue
+            cols = st.columns([3, 2, 2, 2])
+            cols[0].write(f"**{t['name']}**")
+            cols[1].write(f"Due: {t['due_date']}")
+            cols[2].write(f"Estimated time: {t['estimated_hours']}")
+            if cols[3].button("Restore"):
+                t["archived"] = False
+                t["done_hours"] = 0.0
+                save_tasks(tasks)
+                st.success("Updated!")
+                st.rerun()
