@@ -36,8 +36,8 @@ def parse_date(d):
     return datetime.strptime(d, "%Y-%m-%d").date()
 
 
-def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0, start_day=None):
-    start_day = start_day or date.today()
+def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0):
+    today = date.today()
 
     active = [t for t in tasks if t["remaining_hours"] > 0]
     active.sort(key=lambda t: (parse_date(t["due_date"]), t["priority"]))
@@ -52,7 +52,7 @@ def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0, start_day
 
     # Create days + capacity (weekday vs weekend)
     cap = {}
-    day = start_day
+    day = today
     while day <= last_due:
         dkey = str(day)
         plan[dkey] = []
@@ -69,7 +69,7 @@ def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0, start_day
     for t in active:
         due = parse_date(t["due_date"])
         hours_left = t["remaining_hours"]
-        day = start_day
+        day = parse_date(t["start_date"])
 
         while day <= due and hours_left > 0:
             dkey = str(day)
@@ -139,6 +139,8 @@ for t in tasks:
         t["email_sent"] = False
     if "archived" not in t:
         t["archived"] = False
+    if "start_date" not in t:
+        t["start_date"] = str(date.today())
 
 tasks_updated = False
 today = date.today()
@@ -164,6 +166,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["➕ Add Task", "📋 Tasks", "🗓️ Plan", 
 with tab1:
     st.subheader("Add a task")
     name = st.text_input("Task name")
+    start = st.date_input("Start date", value = date.today())
     due = st.date_input("Due date", value=date.today() + timedelta(days=7))
     hours = st.number_input("Estimated hours", min_value=0.5, max_value=200.0, value=5.0, step=0.5)
     priority = st.selectbox("Priority (1 = high)", [1, 2, 3], index=1)
@@ -175,6 +178,7 @@ with tab1:
         else:
             tasks.append({
                 "name": name.strip(),
+                "start_date": str(start),
                 "due_date": str(due),
                 "estimated_hours": float(hours),
                 "done_hours": 0.0,
@@ -232,12 +236,7 @@ with tab3:
     for t in tasks:
         t["remaining_hours"] = max(0.0, float(t["estimated_hours"]) - float(t["done_hours"]))
 
-    plan, warnings = generate_plan(tasks,
-                                   weekday_cap_hours=float(weekday_cap)
-                                   
-                                   ,
-                                   weekend_cap_hours=float(weekend_cap)
-    )
+    plan, warnings = generate_plan(tasks, weekday_cap_hours=float(weekday_cap), weekend_cap_hours=float(weekend_cap))
 
     if warnings:
         for w in warnings:
@@ -258,7 +257,7 @@ with tab4:
         if t["archived"] == True:
             no_task = False
     if no_task:
-        st.info("No history to view yet.")
+        st.info("No history to view yet")
     else:
         for t in tasks:
             if t["archived"] == False:
