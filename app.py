@@ -67,6 +67,8 @@ def generate_plan(tasks, weekday_cap_hours=3.0, weekend_cap_hours=2.0):
 
     # Allocate hours greedily
     for t in active:
+        if t["archived"] == True:
+            continue
         due = parse_date(t["due_date"])
         hours_left = t["remaining_hours"]
         day = parse_date(t["start_date"])
