@@ -326,14 +326,14 @@ with tab5:
     if no_task:
         st.info("No history to view yet")
     else:
-        for t in tasks:
+        for i, t in enumerate(tasks):
             if t["archived"] == False:
                 continue
             cols = st.columns([3, 2, 2, 2])
             cols[0].write(f"**{t['name']}**")
             cols[1].write(f"Due: {t['due_date']}")
             cols[2].write(f"Estimated time: {t['estimated_hours']}")
-            if cols[3].button("Restore"):
+            if cols[3].button("Restore", key = f"res_{i}"):
                 t["archived"] = False
                 t["done_hours"] = 0.0
                 save_tasks(tasks)
